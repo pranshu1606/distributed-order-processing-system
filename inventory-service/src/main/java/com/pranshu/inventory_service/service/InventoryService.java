@@ -19,4 +19,22 @@ public class InventoryService {
                 .orElseThrow(() ->
                         new RuntimeException("Product not found"));
     }
+
+    public Inventory addInventory(Inventory inventory) {
+        return inventoryRepository.save(inventory);
+    }
+
+    public Inventory reduceInventory(Long productId, Integer quantity){
+        Inventory inventory = inventoryRepository
+                .findByProductId(productId)
+                .orElseThrow(()->
+                        new RuntimeException("Not enough inventory"));
+
+        if(inventory.getQuantity()<0){
+            throw new RuntimeException("not enough inventory");
+        }
+        inventory.setQuantity(inventory.getQuantity()-quantity);
+        return inventoryRepository.save(inventory);
+    }
+
 }
