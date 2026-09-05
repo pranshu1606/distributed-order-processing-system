@@ -284,7 +284,7 @@ Example request:
 
 ## Error Handling
 
-The services use custom exceptions and centralized exception handling.
+The services use custom exceptions and centralized exception handling
 
 ### Product Not Found
 
