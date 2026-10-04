@@ -2,6 +2,7 @@ package com.pranshu.order_service.service;
 
 import com.pranshu.order_service.dto.InventoryResponse;
 import com.pranshu.order_service.entity.Order;
+import com.pranshu.order_service.exception.InsufficientInventoryException;
 import com.pranshu.order_service.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -20,7 +21,7 @@ public class OrderService {
         Integer availableQuantity =
                 getInventoryQuantity(order.getProductId());
         if (availableQuantity < order.getQuantity()) {
-            throw new RuntimeException("Not enough inventory");
+            throw new InsufficientInventoryException("Not enough inventory");
         }
         reduceInventory(
                 order.getProductId(),

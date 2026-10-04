@@ -35,4 +35,20 @@ public class GlobalExceptionHandler {
 
         return "Product not found in inventory";
     }
+
+    @ExceptionHandler(InsufficientInventoryException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public String handleInsufficientInventory(
+            InsufficientInventoryException exception) {
+
+        return exception.getMessage();
+    }
+
+    @ExceptionHandler(HttpClientErrorException.Conflict.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public String handleInventoryConflict(
+            HttpClientErrorException.Conflict exception) {
+
+        return "Not enough inventory";
+    }
 }
