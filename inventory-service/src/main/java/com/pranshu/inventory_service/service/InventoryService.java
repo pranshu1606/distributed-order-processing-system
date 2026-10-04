@@ -1,6 +1,8 @@
 package com.pranshu.inventory_service.service;
 
 import com.pranshu.inventory_service.entity.Inventory;
+import com.pranshu.inventory_service.exception.InsufficientInventoryException;
+import com.pranshu.inventory_service.exception.ProductNotFoundException;
 import com.pranshu.inventory_service.repository.InventoryRepository;
 import org.springframework.stereotype.Service;
 
@@ -17,24 +19,26 @@ public class InventoryService {
         return inventoryRepository
                 .findByProductId(productId)
                 .orElseThrow(() ->
-                        new RuntimeException("Product not found"));
+                        new ProductNotFoundException("Product not found"));
     }
 
     public Inventory addInventory(Inventory inventory) {
         return inventoryRepository.save(inventory);
     }
 
-    public Inventory reduceInventory(Long productId, Integer quantity){
+    public Inventory reduceInventory(Long productId, Integer quantity) {
+
         Inventory inventory = inventoryRepository
                 .findByProductId(productId)
-                .orElseThrow(()->
-                        new RuntimeException("Not enough inventory"));
-
-        if(inventory.getQuantity()<0){
-            throw new RuntimeException("not enough inventory");
+                .orElseThrow(() ->
+                        new ProductNotFoundException("Product not found"));
+        if (inventory.getQuantity() < quantity) {
+            throw new InsufficientInventoryException("Not enough inventory");
         }
-        inventory.setQuantity(inventory.getQuantity()-quantity);
+        inventory.setQuantity(
+                inventory.getQuantity() - quantity
+        );
+
         return inventoryRepository.save(inventory);
     }
-
 }
