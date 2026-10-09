@@ -36,6 +36,14 @@ public class GlobalExceptionHandler {
         return "Product not found in inventory";
     }
 
+    @ExceptionHandler(OrderNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public String handleOrderNotFound(
+            OrderNotFoundException exception) {
+
+        return exception.getMessage();
+    }
+
     @ExceptionHandler(InsufficientInventoryException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public String handleInsufficientInventory(

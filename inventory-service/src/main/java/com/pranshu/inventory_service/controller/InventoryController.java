@@ -1,7 +1,9 @@
 package com.pranshu.inventory_service.controller;
 
+import com.pranshu.inventory_service.dto.InventoryRequest;
 import com.pranshu.inventory_service.entity.Inventory;
 import com.pranshu.inventory_service.service.InventoryService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,8 +21,8 @@ public class InventoryController {
     }
 
     @PostMapping
-    public Inventory addInventory(@RequestBody Inventory inventory) {
-        return inventoryService.addInventory(inventory);
+    public Inventory addInventory(@Valid @RequestBody InventoryRequest request) {
+        return inventoryService.addInventory(request);
     }
 
     @PutMapping("/{productId}/reduce")
