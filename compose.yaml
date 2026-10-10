@@ -32,6 +32,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,11 +53,17 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       INVENTORY_SERVICE_URL: http://inventory-service:8081
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
     depends_on:
       postgres:
         condition: service_healthy
       inventory-service:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   existing-postgres-data: {}

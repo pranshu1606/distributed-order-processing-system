@@ -426,6 +426,53 @@ distributed-order-processing-system/
 
 ## Local Development
 
+### Run the stack with Compose
+
+Compose builds both Java applications and runs them with PostgreSQL and Redis.
+On this laptop, include the ignored override to reuse the existing database volume:
+
+```powershell
+docker compose -f compose.yaml -f compose.local.yaml up --build -d --wait
+docker compose -f compose.yaml -f compose.local.yaml ps
+```
+
+For a fresh setup on another machine, use `docker compose up --build -d --wait`.
+The database initialization script creates `order_db` only when PostgreSQL
+initializes an empty data directory; it does not reset an existing database.
+
+Both application containers use curl to check their own `/actuator/health`
+endpoint every 10 seconds. The 60-second startup grace period allows Java to
+initialize before failures count toward the six-failure limit. Each request
+has a 3-second limit, within Docker's 5-second probe timeout.
+Inventory waits for PostgreSQL and Redis to be healthy; Order waits for
+PostgreSQL and Inventory to be healthy. A running container has started its
+process; a healthy container has also passed its health check.
+These conditions control startup, and do not automatically restart unhealthy
+containers or guarantee that future order requests will succeed.
+
+Check the endpoints without changing business data:
+
+```powershell
+Invoke-RestMethod http://localhost:8081/actuator/health
+Invoke-RestMethod http://localhost:8080/actuator/health
+```
+
+Both should report `UP`, and Compose should list all four containers as healthy.
+To rebuild only the applications while leaving the running database and Redis
+containers in place, use:
+
+```powershell
+docker compose -f compose.yaml -f compose.local.yaml up --build --no-deps --wait inventory-service order-service
+```
+
+`--no-deps` skips dependency startup handling, so use this only when the
+dependencies are already healthy. Preserve the laptop override and database
+volume; do not use `down -v` or delete volumes when keeping existing data.
+
+The roadmap below predates the current Compose, Redis caching, and CI work.
+Stock reduction still uses an unlocked query even though a pessimistic-lock
+query exists; concurrency protection remains unfinished.
+
 ### Prerequisites
 
 Install:
