@@ -1,0 +1,22 @@
+# Maven build output
+**/target/
+
+# IDE files
+**/.idea/
+**/*.iml
+.vscode/
+
+# Laptop-specific Compose configuration
+compose.local.yaml
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
