@@ -1,0 +1,23 @@
+{$DEMO_DOMAIN} {
+    basic_auth {
+        {$DEMO_USER} {$DEMO_PASSWORD_HASH}
+    }
+
+    handle /orders* {
+        reverse_proxy order-service:8080
+    }
+    handle /inventory* {
+        reverse_proxy inventory-service:8081
+    }
+    handle /health/order {
+        rewrite * /actuator/health
+        reverse_proxy order-service:8080
+    }
+    handle /health/inventory {
+        rewrite * /actuator/health
+        reverse_proxy inventory-service:8081
+    }
+    handle {
+        respond "Distributed Order Processing demo. See the repository README for API requests." 200
+    }
+}

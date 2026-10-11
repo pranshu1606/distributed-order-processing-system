@@ -50,7 +50,7 @@ public class InventoryService {
         }
 
         Inventory inventory = inventoryRepository
-                .findByProductId(productId)
+                .findByProductIdForUpdate(productId)
                 .orElseThrow(() ->
                         new ProductNotFoundException("Product not found"));
         if (inventory.getQuantity() < quantity) {

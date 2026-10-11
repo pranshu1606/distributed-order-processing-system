@@ -25,13 +25,16 @@ Services:
 - Inventory creation, lookup, and stock reduction.
 - Order creation, lookup by ID, and listing.
 - Request DTOs, validation, and exception handling.
-- Order controller and service tests; Inventory has a context-startup test only.
-- Transactional inventory reduction; PESSIMISTIC_WRITE query is defined but
-  reduceInventory still calls the unlocked findByProductId query.
+- Order controller/service/context tests; Inventory has context, concurrent
+  reduction, rejection, and cache-eviction integration tests.
+- Transactional inventory reduction uses findByProductIdForUpdate with
+  PESSIMISTIC_WRITE; PostgreSQL remains the authority for stock decisions.
 - Redis inventory caching with a 60-second TTL.
 - Cache eviction after successful stock reduction.
 - JSON serialization using JacksonJsonRedisSerializer<Inventory>.
 - Transaction-aware RedisCacheManager.
+- RedisCacheWriter uses immediateWrites(true). Spring Data Redis 4 otherwise
+  performs puts/eviction asynchronously; tests exposed delayed cache operations.
 - Multi-stage Dockerfiles that build the JARs inside Docker.
 - Fresh Compose deployment with automatic database initialization.
 - Actuator health endpoints on both services returning UP.
@@ -65,15 +68,36 @@ Compose health-check changes are implemented:
 - Only app containers were recreated using the laptop override and --no-deps.
   PostgreSQL container ID and volume stayed unchanged; before/after row counts
   and full-table fingerprints match (2 inventory rows, 6 orders).
-- GitHub CI for commit 8676cf3 completed successfully (checked 2026-10-10);
-  it does not cover the current uncommitted health-check changes.
+- Health checks were committed as 9a61323. GitHub CI for that commit completed
+  successfully (checked 2026-10-11). New local changes are not yet covered by CI.
+
+Current follow-up (2026-10-11):
+- Stock locking activated. Inventory's 6 tests pass against disposable
+  PostgreSQL 18.6 and Redis on Java 17, including three repetitions of ten
+  simultaneous reductions against five units and synchronous cache eviction.
+- README startup instructions, architecture, API examples, and roadmap updated.
+- CI now builds the portable stack and verifies healthy startup/endpoints.
+- compose.test.yaml and compose.smoke.yaml provide isolated verification;
+  PostgreSQL uses tmpfs and never mounts the laptop data volume.
+- User selected "Prepare deployment files first". compose.demo.yaml, Caddyfile,
+  .env.demo.example, and docs/demo-hosting.md prepare a VM demo with HTTPS and
+  password access. No cloud resources created. Server/domain/public TLS pending.
+- Demo Compose/Caddy configuration validated. Internal proxy checks return
+  401 without credentials; authenticated health and inventory/order API checks
+  pass. Test stock reduced from 10 to 8, only in the isolated smoke database.
+- Final Java 17 verification: all 18 tests pass (Inventory 6, Order 12).
+  Final images build and isolated startup passes. Laptop Inventory alone was
+  recreated using the tested image, the local override, and --no-deps.
+  All four laptop containers are healthy; both health endpoints return UP.
+- PostgreSQL container ID and volume unchanged. Before/after full-table
+  fingerprints match: inventory 2 rows, 350328e56012d1493c93c92c33999471;
+  orders 6 rows, ee24ad4826a13dfdb80e3d424e074b02. No business writes on laptop.
 
 ## Remaining work
 
-- Affordable public demo hosting and documentation.
-- Activate and verify the existing locked stock-reduction query; concurrency
-  protection is not currently implemented despite the earlier handoff claim.
-- README roadmap and manual startup instructions predate Docker/caching/CI work.
+- Launch a public demo when a server/domain and budget are supplied; files and
+  hosting documentation are prepared. Verify real DNS, TLS, and APIs afterward.
+- Push current changes and verify the new GitHub CI run.
 - Kubernetes and Azure are later roadmap items.
 - Payment, notifications, and messaging are optional extensions.
 - Reliability gap: inventory reduction can succeed before saving the

@@ -1,0 +1,11 @@
+# Overlay for isolated image/startup verification (Compose 2.24.4+).
+services:
+  postgres:
+    volumes: !override
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql
+  inventory-service:
+    ports: !reset []
+  order-service:
+    ports: !reset []

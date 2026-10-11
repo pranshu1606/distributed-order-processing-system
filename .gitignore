@@ -13,6 +13,7 @@ compose.local.yaml
 .env
 .env.*
 !.env.example
+!.env.demo.example
 
 # Logs
 *.log

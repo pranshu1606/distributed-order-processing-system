@@ -1,735 +1,176 @@
-# Distributed Order Processing System
+﻿# Distributed Order Processing System
 
-A distributed e-commerce backend built with Spring Boot microservices, designed to model how a real-world order processing system can be decomposed into independent services.
-
-The project is being developed incrementally to understand and implement microservices architecture, service-to-service communication, database-per-service design, concurrency, caching, containerization, Kubernetes, CI/CD, and cloud deployment.
-
----
+A learning backend using Java 17, Spring Boot 4.0.8, PostgreSQL 18.6, Redis 7,
+Maven, Docker Compose, and GitHub Actions.
 
 ## Architecture
 
-```text
-                         ┌───────────────┐
-                         │    Client     │
-                         └───────┬───────┘
-                                 │
-                                 │ HTTP
-                                 ▼
-                       ┌───────────────────┐
-                       │   Order Service   │
-                       │      :8080        │
-                       └─────────┬─────────┘
-                                 │
-                                 │ REST
-                                 ▼
-                     ┌───────────────────────┐
-                     │  Inventory Service   │
-                     │        :8081          │
-                     └───────────┬───────────┘
-                                 │
-                                 ▼
-                         ┌───────────────┐
-                         │  PostgreSQL   │
-                         │ inventory_db  │
-                         └───────────────┘
-
-
-                    Future Services
-                    ────────────────
-
-              ┌──────────────────────┐
-              │    Payment Service   │
-              └──────────────────────┘
-
-              ┌──────────────────────┐
-              │ Notification Service │
-              └──────────────────────┘
+```mermaid
+flowchart LR
+    Client --> Order[Order Service :8080]
+    Client --> Inventory[Inventory Service :8081]
+    Order -->|Spring RestClient| Inventory
+    Order --> OrderDB[(order_db)]
+    Inventory --> InventoryDB[(inventory_db)]
+    Inventory --> Redis[(Redis cache)]
 ```
 
-Each microservice is responsible for its own business logic and data.
-
-Services communicate through APIs rather than directly accessing another service's database.
-
----
-
-## Current Status
-
-### Inventory Service
-
-- [x] Spring Boot application
-- [x] PostgreSQL integration
-- [x] JPA / Hibernate
-- [x] Inventory entity
-- [x] Repository layer
-- [x] Service layer
-- [x] REST controller
-- [x] Add inventory
-- [x] Get inventory
-- [x] Reduce inventory
-- [x] Product-not-found exception handling
-- [x] Insufficient-inventory exception handling
-- [x] Global exception handling
-
-### Order Service
-
-- [x] Spring Boot application
-- [x] PostgreSQL integration
-- [x] JPA / Hibernate
-- [x] Order entity
-- [x] Repository layer
-- [x] Service layer
-- [x] REST controller
-- [x] Order creation
-- [x] Request validation
-- [x] Global exception handling
-- [x] Communication with Inventory Service
-- [x] Inventory availability check
-- [x] Inventory reduction during order creation
-
----
-
-## Order Processing Flow
-
-When a client creates an order, the Order Service communicates with the Inventory Service before saving the order.
-
-```text
-Client
-  │
-  │ POST /orders
-  ▼
-Order Controller
-  │
-  ▼
-Order Service
-  │
-  │ GET /inventory/{productId}
-  ▼
-Inventory Service
-  │
-  │ Check stock
-  ▼
-Order Service
-  │
-  │ PUT /inventory/{productId}/reduce
-  ▼
-Inventory Service
-  │
-  │ Reduce stock
-  ▼
-Order Service
-  │
-  │ Save order
-  ▼
-PostgreSQL
-```
-
-Example request:
-
-```http
-POST /orders
-```
-
-```json
-{
-  "productId": 101,
-  "quantity": 2,
-  "status": "CREATED"
-}
-```
-
-The Order Service:
-
-1. Receives the order request.
-2. Validates the request.
-3. Checks inventory availability.
-4. Requests the Inventory Service to reduce the stock.
-5. Saves the order in its own database.
-
----
-
-## Microservices
-
-### Order Service
-
-Responsible for:
-
-- Creating orders
-- Validating order requests
-- Managing order state
-- Communicating with other services
-
-**Port:** `8080`
-
-```text
-order-service/
-├── controller/
-├── service/
-├── repository/
-├── entity/
-├── dto/
-└── exception/
-```
-
-### Inventory Service
-
-Responsible for:
-
-- Managing product inventory
-- Checking stock availability
-- Increasing inventory
-- Reducing inventory
-- Handling inventory-related errors
-
-**Port:** `8081`
-
-```text
-inventory-service/
-├── controller/
-├── service/
-├── repository/
-├── entity/
-└── exception/
-```
-
----
-
-## API Endpoints
-
-### Inventory Service
-
-Base URL:
-
-```text
-http://localhost:8081
-```
-
-#### Get Inventory
-
-```http
-GET /inventory/{productId}
-```
-
-Example:
-
-```http
-GET /inventory/101
-```
-
-Example response:
-
-```json
-{
-  "id": 1,
-  "productId": 101,
-  "productName": "iPhone",
-  "quantity": 8
-}
-```
-
-#### Add Inventory
-
-```http
-POST /inventory
-```
-
-Example request:
-
-```json
-{
-  "productId": 101,
-  "productName": "iPhone",
-  "quantity": 10
-}
-```
-
-#### Reduce Inventory
-
-```http
-PUT /inventory/{productId}/reduce?quantity={quantity}
-```
-
-Example:
-
-```http
-PUT /inventory/101/reduce?quantity=2
-```
-
----
-
-### Order Service
-
-Base URL:
-
-```text
-http://localhost:8080
-```
-
-#### Create Order
-
-```http
-POST /orders
-```
-
-Example request:
-
-```json
-{
-  "productId": 101,
-  "quantity": 2,
-  "status": "CREATED"
-}
-```
-
----
-
-## Error Handling
-
-The services use custom exceptions and centralized exception handling
-
-### Product Not Found
-
-```text
-GET /inventory/9999
-```
-
-Response:
-
-```text
-404 Not Found
-Product not found
-```
-
-### Insufficient Inventory
-
-Attempting to purchase more inventory than is available results in:
-
-```text
-409 Conflict
-Not enough inventory
-```
-
-### Invalid Order
-
-Requests failing validation return:
-
-```text
-400 Bad Request
-```
-
-For example, an order with a quantity below `1` is rejected before reaching the business logic.
-
----
-
-## Database Architecture
-
-The system follows a **database-per-service** approach.
-
-```text
-┌──────────────────┐
-│   Order Service  │
-└────────┬─────────┘
-         │
-         ▼
-   ┌───────────┐
-   │ order_db  │
-   └───────────┘
-
-
-┌──────────────────────┐
-│  Inventory Service   │
-└──────────┬───────────┘
-           │
-           ▼
-    ┌──────────────┐
-    │ inventory_db │
-    └──────────────┘
-```
-
-A service owns its database and other services interact with it through APIs.
-
-This keeps service responsibilities separated and prevents direct database coupling between services.
-
----
-
-## Tech Stack
-
-### Backend
-
-- Java
-- Spring Boot
-- Spring Web
-- Spring Data JPA
-- Hibernate
-- REST APIs
-
-### Database
-
-- PostgreSQL
-
-### Caching & Distributed Systems
-
-- Redis
-- Distributed locking
-- Rate limiting
-
-### Containerization & Orchestration
-
-- Docker
-- Docker Compose
-- Kubernetes
-
-### CI/CD
-
-- GitHub Actions
-
-### Cloud
-
-- Microsoft Azure
-- Azure Container Registry
-- Azure Kubernetes Service
-- Azure Cache for Redis
-
-### Testing
-
-- JUnit
-- Integration Testing
-
----
-
-## Project Structure
-
-```text
-distributed-order-processing-system/
-│
-├── inventory-service/
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/
-│   │   │   └── resources/
-│   │   └── test/
-│   ├── pom.xml
-│   └── ...
-│
-├── order-service/
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/
-│   │   │   └── resources/
-│   │   └── test/
-│   ├── pom.xml
-│   └── ...
-│
-└── README.md
-```
-
----
-
-## Local Development
-
-### Run the stack with Compose
-
-Compose builds both Java applications and runs them with PostgreSQL and Redis.
-On this laptop, include the ignored override to reuse the existing database volume:
+Each service owns its database, currently hosted in one PostgreSQL container.
+Order creation reads inventory, requests a reduction, then saves the order with
+status CREATED. Clients send only productId and quantity.
+
+Stock reduction runs in a transaction using a PostgreSQL pessimistic row lock.
+Concurrent reductions for the same product wait, then check the current stock.
+PostgreSQL is the authority for stock decisions; reduction bypasses Redis.
+Inventory GET responses use Redis with a 60-second TTL. Successful reductions
+trigger eviction through a transaction-aware cache manager. Redis writes and
+eviction wait for completion instead of running in the background. Cached reads are
+not strongly consistent: a racing read can repopulate an old value. Order's
+preliminary cached check can reject a request based on stale data; the locked
+reduction is the final stock check.
+
+**Reliability gap:** stock reduction can succeed before saving the order fails.
+Retries can reduce stock again. Reservations/compensation and idempotency remain
+unfinished. This is a learning demo, not a complete checkout system.
+
+## Start locally
+
+Install Docker with Compose v2. Docker builds both apps; this path needs no
+local Java or Maven installation.
+
+On the existing laptop, reuse its database volume with the ignored override:
 
 ```powershell
 docker compose -f compose.yaml -f compose.local.yaml up --build -d --wait
 docker compose -f compose.yaml -f compose.local.yaml ps
 ```
 
-For a fresh setup on another machine, use `docker compose up --build -d --wait`.
-The database initialization script creates `order_db` only when PostgreSQL
-initializes an empty data directory; it does not reset an existing database.
+On a fresh machine:
 
-Both application containers use curl to check their own `/actuator/health`
-endpoint every 10 seconds. The 60-second startup grace period allows Java to
-initialize before failures count toward the six-failure limit. Each request
-has a 3-second limit, within Docker's 5-second probe timeout.
-Inventory waits for PostgreSQL and Redis to be healthy; Order waits for
-PostgreSQL and Inventory to be healthy. A running container has started its
-process; a healthy container has also passed its health check.
-These conditions control startup, and do not automatically restart unhealthy
-containers or guarantee that future order requests will succeed.
+```sh
+docker compose up --build -d --wait
+docker compose ps
+```
 
-Check the endpoints without changing business data:
+Database initialization creates order_db only on an empty PostgreSQL data
+directory. Existing volumes keep their data and do not rerun initialization.
+Do not use `down -v` or delete database volumes to fix startup problems.
+
+Check health without writing business data:
 
 ```powershell
 Invoke-RestMethod http://localhost:8081/actuator/health
 Invoke-RestMethod http://localhost:8080/actuator/health
 ```
 
-Both should report `UP`, and Compose should list all four containers as healthy.
-To rebuild only the applications while leaving the running database and Redis
-containers in place, use:
+Both should report UP and all four containers should be healthy. App probes run
+every 10 seconds, with a 60-second startup grace period, 5-second timeout, and
+6 retries. Inventory waits for healthy PostgreSQL and Redis; Order waits for
+healthy PostgreSQL and Inventory. These conditions control startup; they do not
+automatically restart unhealthy processes or guarantee future requests.
+
+To rebuild only laptop apps while leaving dependencies running:
 
 ```powershell
-docker compose -f compose.yaml -f compose.local.yaml up --build --no-deps --wait inventory-service order-service
+docker compose -f compose.yaml -f compose.local.yaml up --build --no-deps -d --wait inventory-service order-service
 ```
 
-`--no-deps` skips dependency startup handling, so use this only when the
-dependencies are already healthy. Preserve the laptop override and database
-volume; do not use `down -v` or delete volumes when keeping existing data.
+Use `logs --tail 100` with the same Compose options for diagnostics, and `stop`
+to stop containers without deleting data.
 
-The roadmap below predates the current Compose, Redis caching, and CI work.
-Stock reduction still uses an unlocked query even though a pessimistic-lock
-query exists; concurrency protection remains unfinished.
+## Try the API
 
-### Prerequisites
+These examples write data and reduce stock. Use a fresh demo or a new product
+ID; adding an existing product returns a conflict.
 
-Install:
-
-- Java
-- Maven
-- Docker
-- IntelliJ IDEA (recommended)
-- PostgreSQL client (optional)
-
-### Start PostgreSQL
-
-PostgreSQL is currently running inside Docker.
-
-```bash
-docker run --name inventory-postgres \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=inventory_db \
-  -p 5432:5432 \
-  -d postgres
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8081/inventory -ContentType 'application/json' -Body '{"productId":101,"productName":"Demo product","quantity":10}'
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/orders -ContentType 'application/json' -Body '{"productId":101,"quantity":2}'
+Invoke-RestMethod http://localhost:8081/inventory/101
+Invoke-RestMethod http://localhost:8080/orders
 ```
 
-The container exposes PostgreSQL on:
+| Service | Method | Endpoint | Purpose |
+| --- | --- | --- | --- |
+| Inventory | POST | /inventory | Create stock |
+| Inventory | GET | /inventory/{productId} | Read stock (cached) |
+| Inventory | PUT | /inventory/{productId}/reduce?quantity=2 | Reduce stock with a database row lock |
+| Order | POST | /orders | Create an order and reduce stock |
+| Order | GET | /orders/{id} | Look up an order |
+| Order | GET | /orders | List orders |
+| Both | GET | /actuator/health | Check health |
 
-```text
-localhost:5432
+Validation failures return 400, missing products/orders return 404, and
+insufficient stock returns 409. Reduction quantities must be positive.
+
+## Test safely
+
+This separate stack never mounts the laptop database volume. PostgreSQL test
+data lives in memory; database and Redis ports are not published.
+
+```sh
+docker compose -p order-verification -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests
+docker compose -p order-verification -f compose.test.yaml down
 ```
 
-### Start Inventory Service
+The first command returns the tests' exit code and runs both Maven verify suites
+on Java 17. Inventory tests start ten simultaneous reductions against five
+units: exactly five must succeed, five must be rejected, and stock must finish
+at zero. Rejected reductions must leave stock unchanged. Order has controller,
+service, and context-startup tests.
 
-Run the Spring Boot application from:
+For an isolated image/startup check (Compose 2.24.4+), without publishing app
+ports or using the laptop database volume:
 
-```text
-inventory-service
+```sh
+docker compose -p order-smoke -f compose.yaml -f compose.smoke.yaml up --build -d --wait
+docker compose -p order-smoke -f compose.yaml -f compose.smoke.yaml exec inventory-service curl --fail http://localhost:8081/actuator/health
+docker compose -p order-smoke -f compose.yaml -f compose.smoke.yaml exec order-service curl --fail http://localhost:8080/actuator/health
+docker compose -p order-smoke -f compose.yaml -f compose.smoke.yaml down
 ```
 
-The service runs on:
+The smoke overlay uses PostgreSQL in memory; its data is disposable.
 
-```text
-http://localhost:8081
-```
+For manual Java development, supply dedicated development/test PostgreSQL
+and Redis instances, configure the variables below, and run `./mvnw
+spring-boot:run` inside each service (Windows: `.\mvnw.cmd spring-boot:run`).
+Use `verify` instead to run tests. Integration tests insert/delete test rows;
+do not run them against valuable data.
 
-### Start Order Service
+| Variable | Inventory | Order |
+| --- | --- | --- |
+| SPRING_DATASOURCE_URL | JDBC URL for inventory_db | JDBC URL for order_db |
+| SPRING_DATASOURCE_USERNAME | Database user | Database user |
+| SPRING_DATASOURCE_PASSWORD | Database password | Database password |
+| REDIS_HOST, REDIS_PORT | Redis address; default localhost:6379 | Unused |
+| INVENTORY_SERVICE_URL | Unused | Inventory URL; default http://localhost:8081 |
 
-Run the Spring Boot application from:
+Portable Compose supplies internal addresses and publishes no database/Redis
+ports. Hibernate currently uses ddl-auto=update; schema migrations are future work.
 
-```text
-order-service
-```
+## CI and hosting
 
-The service runs on:
+GitHub Actions runs both test suites against isolated PostgreSQL/Redis, builds
+both images, and now checks healthy Compose startup and health endpoints.
+See [workflow runs](https://github.com/pranshu1606/distributed-order-processing-system/actions).
+Last remotely verified successful commit: 9a61323 (checked 2026-10-11).
+Current local changes need a push and a new run before claiming CI coverage.
 
-```text
-http://localhost:8080
-```
-
-Both services must be running for the complete order flow to work.
-
----
-
-## Example End-to-End Test
-
-### 1. Add inventory
-
-```http
-POST http://localhost:8081/inventory
-```
-
-```json
-{
-  "productId": 101,
-  "productName": "iPhone",
-  "quantity": 10
-}
-```
-
-### 2. Create an order
-
-```http
-POST http://localhost:8080/orders
-```
-
-```json
-{
-  "productId": 101,
-  "quantity": 2,
-  "status": "CREATED"
-}
-```
-
-### 3. Check inventory
-
-```http
-GET http://localhost:8081/inventory/101
-```
-
-The inventory should now reflect the reduced quantity.
-
----
-
-## Important Distributed Systems Challenges
-
-The current implementation intentionally keeps the core flow simple.
-
-The current order process is:
-
-```text
-1. Check inventory
-2. Reduce inventory
-3. Save order
-```
-
-This creates several distributed-systems challenges.
-
-### Failure During Order Creation
-
-For example:
-
-```text
-Inventory reduced
-       ↓
-Order database fails
-       ↓
-Inventory is reduced
-but order was not created
-```
-
-This can result in inconsistent state between services.
-
-### Concurrent Orders
-
-Consider inventory containing:
-
-```text
-Quantity = 5
-```
-
-Two customers simultaneously request:
-
-```text
-Customer A → 5 items
-Customer B → 5 items
-```
-
-Both requests could potentially see the same available quantity before either reduction completes.
-
-This can lead to **overselling**.
-
-These problems will be addressed in later stages using concurrency control, Redis, distributed locking, atomic operations, and improved failure handling.
-
----
+See [demo deployment instructions](docs/demo-hosting.md). Files for a small VM,
+HTTPS, and password access are prepared. A server/domain and live verification
+are pending.
 
 ## Roadmap
 
-### Phase 1 — Core Services
-
-- [x] Inventory Service
-- [x] Order Service
-- [x] PostgreSQL
-- [x] REST communication
-- [x] Validation
-- [x] Exception handling
-- [x] Basic order processing
-
-### Phase 2 — Distributed Systems
-
-- [ ] Redis
-- [ ] Inventory caching
-- [ ] Distributed locking
-- [ ] Concurrency protection
-- [ ] Overselling prevention
-- [ ] Rate limiting
-- [ ] Improved failure handling
-- [ ] Idempotency
-
-### Phase 3 — Containerization
-
-- [ ] Dockerize Order Service
-- [ ] Dockerize Inventory Service
-- [ ] Docker Compose
-- [ ] Container networking
-- [ ] Environment-based configuration
-
-### Phase 4 — Kubernetes
-
-- [ ] Kubernetes deployments
-- [ ] Kubernetes services
-- [ ] ConfigMaps
-- [ ] Secrets
-- [ ] Health checks
-- [ ] Scaling
-- [ ] Resource limits
-
-### Phase 5 — CI/CD
-
-- [ ] GitHub Actions
-- [ ] Automated tests
-- [ ] Docker image builds
-- [ ] Push images to Azure Container Registry
-- [ ] Automated deployment
-
-### Phase 6 — Azure
-
-- [ ] Azure Container Registry
-- [ ] Azure Kubernetes Service
-- [ ] Azure Cache for Redis
-- [ ] Cloud database
-- [ ] Production-style configuration
-
-### Phase 7 — Additional Services
-
-- [ ] Payment Service
-- [ ] Notification Service
-- [ ] Order status management
-- [ ] Failure/retry handling
-
-### Phase 8 — Event-Driven Architecture
-
-- [ ] Kafka / RabbitMQ / Azure Service Bus
-- [ ] Asynchronous order events
-- [ ] Payment events
-- [ ] Notification events
-- [ ] Event-based service communication
-
----
-
-## Learning Goals
-
-This project is being built incrementally to understand the engineering concepts behind distributed systems rather than simply assembling technologies.
-
-Key concepts include:
-
-- Microservice architecture
-- Separation of responsibilities
-- REST communication
-- Service-to-service communication
-- Dependency injection
-- JPA and Hibernate
-- Repository and service layers
-- Database-per-service architecture
-- Input validation
-- Exception handling
-- Distributed transactions
-- Concurrency
-- Caching
-- Distributed locking
-- Containerization
-- Kubernetes orchestration
-- CI/CD
-- Cloud deployment
-- Event-driven architecture
-
----
-
-## Goal
-
-The final goal is to build a realistic distributed e-commerce backend that demonstrates how independently deployable services can work together while handling the challenges of consistency, concurrency, failures, scaling, and deployment.
-
-The project will evolve from a simple Spring Boot implementation into a distributed system deployed using containers, Kubernetes, CI/CD, and cloud infrastructure.
+- [x] Inventory/order APIs, validation, and exception handling
+- [x] PostgreSQL database ownership per service
+- [x] Redis cache, TTL, and eviction
+- [x] Transactional reduction with PostgreSQL row locking
+- [x] Docker builds, Compose, database initialization, health checks
+- [x] GitHub Actions tests and image builds
+- [ ] Push and verify CI for latest locking/startup checks
+- [ ] Launch and verify public demo
+- [ ] Reservations/compensation and idempotent order creation
+- [ ] Timeouts, failure recovery, and schema migrations
+- [ ] Kubernetes and Azure (later milestones)
+- [ ] Optional payment, notification, and messaging

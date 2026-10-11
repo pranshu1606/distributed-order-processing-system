@@ -83,8 +83,21 @@ jobs:
           chmod +x mvnw
           ./mvnw -B verify
 
-      - name: Build Inventory Docker image
-        run: docker build -t inventory-service:ci ./inventory-service
+      - name: Validate and build portable Compose stack
+        run: |
+          docker compose config --quiet
+          docker compose build
 
-      - name: Build Order Docker image
-        run: docker build -t order-service:ci ./order-service
+      - name: Verify healthy startup
+        run: |
+          docker compose up -d --no-build --wait --wait-timeout 180
+          curl --fail http://localhost:8081/actuator/health
+          curl --fail http://localhost:8080/actuator/health
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 100
+
+      - name: Stop demo containers
+        if: always()
+        run: docker compose down

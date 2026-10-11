@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
@@ -32,7 +33,11 @@ public class CacheConfig {
                                         .fromSerializer(serializer)
                         );
 
-        return RedisCacheManager.builder(connectionFactory)
+        // Wait for Redis writes/eviction; transactionAware still defers them until commit.
+        RedisCacheWriter cacheWriter = RedisCacheWriter.create(
+                connectionFactory, config -> config.immediateWrites(true));
+
+        return RedisCacheManager.builder(cacheWriter)
                 .withCacheConfiguration("inventory", inventoryConfig)
                 .disableCreateOnMissingCache()
                 .transactionAware()
