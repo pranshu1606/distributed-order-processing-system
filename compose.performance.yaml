@@ -1,0 +1,16 @@
+# Overlay for the isolated portfolio-demo; bounds JVM/thread resources on the laptop.
+services:
+  inventory-service:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx256m -Xss512k -XX:ActiveProcessorCount=4 -XX:+UseG1GC
+      SERVER_TOMCAT_THREADS_MAX: "128"
+      SERVER_TOMCAT_ACCEPT_COUNT: "2000"
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "16"
+  order-service:
+    mem_limit: 640m
+    environment:
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx256m -Xss512k -XX:ActiveProcessorCount=4 -XX:+UseG1GC
+      SERVER_TOMCAT_THREADS_MAX: "128"
+      SERVER_TOMCAT_ACCEPT_COUNT: "2000"
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "16"

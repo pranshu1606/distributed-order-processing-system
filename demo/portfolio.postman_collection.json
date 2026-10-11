@@ -1,0 +1,308 @@
+{
+  "info": {
+    "name": "Distributed Order Processing - Portfolio API Demo",
+    "description": "Ten ordered requests demonstrating health, inventory creation, order creation, stock changes, and error handling. Default URLs target the isolated portfolio-demo stack. Each run creates a new product. Run once in numbered order; start from step 03 to repeat the business flow. Concurrency is verified separately by integration tests; cross-service compensation and idempotency remain unfinished.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "inventoryUrl",
+      "value": "http://127.0.0.1:18081",
+      "type": "string"
+    },
+    {
+      "key": "orderUrl",
+      "value": "http://127.0.0.1:18080",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Inventory health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{inventoryUrl}}/actuator/health",
+        "description": "Inventory can reach its dependencies."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Inventory is UP', () => pm.expect(pm.response.json().status).to.equal('UP'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Order health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{orderUrl}}/actuator/health",
+        "description": "Order Service is ready."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Order is UP', () => pm.expect(pm.response.json().status).to.equal('UP'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Create ten stock units",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{inventoryUrl}}/inventory",
+        "description": "Creates a new product ID each run. Run steps in numbered order.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\": {{productId}}, \"productName\": \"Portfolio demo headphones\", \"quantity\": 10}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('productId', String(Date.now() * 1000 + Math.floor(Math.random() * 1000)));",
+              "pm.collectionVariables.unset('orderId');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Ten units created', () => { pm.expect(pm.response.json().quantity).to.equal(10); pm.expect(pm.response.json().productId).to.equal(Number(pm.collectionVariables.get('productId'))); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Read stock and populate cache",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{inventoryUrl}}/inventory/{{productId}}",
+        "description": "Inventory reads use Redis; stock decisions remain in PostgreSQL."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Ten units available', () => pm.expect(pm.response.json().quantity).to.equal(10));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Place order for two units",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{orderUrl}}/orders",
+        "description": "Order Service calls Inventory Service, then saves an order.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\": {{productId}}, \"quantity\": 2}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) pm.collectionVariables.set('orderId', String(pm.response.json().id));",
+              "pm.test('Order created for two units', () => { pm.expect(pm.response.json().status).to.equal('CREATED'); pm.expect(pm.response.json().quantity).to.equal(2); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Verify eight units remain",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{inventoryUrl}}/inventory/{{productId}}",
+        "description": "Successful reduction evicts the earlier cache entry. This sequential demo does not prove strong consistency."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Stock decreased from ten to eight', () => pm.expect(pm.response.json().quantity).to.equal(8));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Look up saved order",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{orderUrl}}/orders/{{orderId}}",
+        "description": "The saved order comes from Order Service's own database."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Saved order matches', () => { pm.expect(pm.response.json().id).to.equal(Number(pm.collectionVariables.get('orderId'))); pm.expect(pm.response.json().productId).to.equal(Number(pm.collectionVariables.get('productId'))); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Reject twenty-unit order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{orderUrl}}/orders",
+        "description": "Expected business rejection: twenty exceeds eight available units.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\": {{productId}}, \"quantity\": 20}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Clear stock error', () => pm.expect(pm.response.text()).to.include('Not enough inventory'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Reject quantity zero",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{orderUrl}}/orders",
+        "description": "DTO validation rejects invalid input before stock changes.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\": {{productId}}, \"quantity\": 0}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Quantity validation error', () => pm.expect(pm.response.json()).to.have.property('quantity'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Verify rejected orders preserve stock",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{inventoryUrl}}/inventory/{{productId}}",
+        "description": "Both failed requests leave stock at eight."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Stock remains eight', () => pm.expect(pm.response.json().quantity).to.equal(8));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

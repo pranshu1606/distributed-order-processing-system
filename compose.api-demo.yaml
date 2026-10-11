@@ -1,0 +1,14 @@
+# Recording/Postman overlay. Use with compose.yaml and project portfolio-demo.
+# Compose 2.24.4+. PostgreSQL is disposable; laptop data is never mounted.
+services:
+  postgres:
+    volumes: !override
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql
+  inventory-service:
+    ports: !override
+      - "127.0.0.1:18081:8081"
+  order-service:
+    ports: !override
+      - "127.0.0.1:18080:8080"

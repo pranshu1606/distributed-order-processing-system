@@ -18,6 +18,10 @@ compose.local.yaml
 # Logs
 *.log
 
+# Generated API demo evidence
+demo/artifacts/
+**/__pycache__/
+
 # OS files
 .DS_Store
 Thumbs.db
