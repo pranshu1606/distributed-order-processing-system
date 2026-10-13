@@ -180,7 +180,8 @@ Current follow-up (2026-10-11):
   uncommitted until verified). GitHub CI run 38167103509 succeeded (2026-10-12).
 - Kubernetes and Azure are later roadmap items.
 - Payment, notifications, and messaging are optional extensions.
-- Stress/resilience milestone (2026-10-13), uncommitted: Docker restored (laptop
+- Stress/resilience milestone (2026-10-13), committed as 61cc695; GitHub CI run
+  38417171374 succeeded. Portfolio site updated in 1ab1857 (live verified): Docker restored (laptop
   DB fingerprints 2/6 unchanged after crash recovery). Added stock reservations
   (stock_reservations table, reservationId on reduce, idempotent release with
   tombstones), background compensation in Order (InventoryClient), 503 +
