@@ -4,7 +4,8 @@ WORKDIR /build
 COPY pom.xml .
 COPY src ./src
 
-RUN mvn -B clean package -DskipTests
+RUN --mount=type=cache,id=maven-17,target=/root/.m2,sharing=locked \
+    MAVEN_OPTS="-Xmx256m -XX:ActiveProcessorCount=2" mvn -B clean package -DskipTests
 
 FROM eclipse-temurin:17-jre
 

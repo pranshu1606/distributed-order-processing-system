@@ -3,6 +3,14 @@
 A learning backend using Java 17, Spring Boot 4.0.8, PostgreSQL 18.6, Redis 7,
 Maven, Docker Compose, and GitHub Actions.
 
+[![Build and Test](https://github.com/pranshu1606/distributed-order-processing-system/actions/workflows/ci.yml/badge.svg)](https://github.com/pranshu1606/distributed-order-processing-system/actions/workflows/ci.yml)
+
+On one laptop it sustains **400 checkouts/s** (order p95 9 ms) and keeps stock
+exact under overload and an 8-second database outage: **0 lost units and 0
+duplicate orders** across every stress run. See
+[stress and resilience testing](docs/stress-and-resilience.md) and the
+[testing and validation report](docs/testing-and-validation.md).
+
 ## Architecture
 
 ```mermaid
@@ -16,22 +24,31 @@ flowchart LR
 ```
 
 Each service owns its database, currently hosted in one PostgreSQL container.
-Order creation reads inventory, requests a reduction, then saves the order with
+Order creation requests an authoritative inventory reduction, then saves the order with
 status CREATED. Clients send only productId and quantity.
 
-Stock reduction runs in a transaction using a PostgreSQL pessimistic row lock.
-Concurrent reductions for the same product wait, then check the current stock.
+Stock reduction runs in a transaction using one conditional PostgreSQL update:
+`UPDATE ... SET quantity = quantity - ? WHERE product_id = ? AND quantity >= ? RETURNING ...`.
+PostgreSQL locks the row and rechecks available stock after competing updates.
 PostgreSQL is the authority for stock decisions; reduction bypasses Redis.
 Inventory GET responses use Redis with a 60-second TTL. Successful reductions
 trigger eviction through a transaction-aware cache manager. Redis writes and
 eviction wait for completion instead of running in the background. Cached reads are
-not strongly consistent: a racing read can repopulate an old value. Order's
-preliminary cached check can reject a request based on stale data; the locked
-reduction is the final stock check.
+not strongly consistent: a racing read can repopulate an old value. Order
+creation does not use a preliminary cached stock check; the locked reduction
+checks availability. Its HTTP client uses a bounded connection pool, bounded
+wait/read timeouts, and disables automatic retries for stock mutations.
 
-**Reliability gap:** stock reduction can succeed before saving the order fails.
-Retries can reduce stock again. Reservations/compensation and idempotency remain
-unfinished. This is a learning demo, not a complete checkout system.
+**Failure handling:** every order carries a reservation ID. Inventory records it
+in the same transaction as the stock reduction, so retries never reduce twice.
+If Inventory times out or the order cannot be saved, Order releases the
+reservation in the background (release is idempotent and blocks a late
+reduction) and answers `503` with `Retry-After`. Clients may send an
+`Idempotency-Key` header so a retried order is never duplicated. Release
+retries are kept in memory only, so a crash can leave a reservation without an
+order; automatic reconciliation is future work. See
+[stress and resilience testing](docs/stress-and-resilience.md).
+This is a learning demo, not a complete checkout system.
 
 ## Start locally
 
@@ -94,8 +111,9 @@ Invoke-RestMethod http://localhost:8080/orders
 | --- | --- | --- | --- |
 | Inventory | POST | /inventory | Create stock |
 | Inventory | GET | /inventory/{productId} | Read stock (cached) |
-| Inventory | PUT | /inventory/{productId}/reduce?quantity=2 | Reduce stock with a database row lock |
-| Order | POST | /orders | Create an order and reduce stock |
+| Inventory | PUT | /inventory/{productId}/reduce?quantity=2&reservationId={uuid} | Atomically check and reduce stock (reservationId optional, makes retries safe) |
+| Inventory | POST | /inventory/reservations/{reservationId}/release | Return reserved stock exactly once |
+| Order | POST | /orders (optional `Idempotency-Key` header) | Create an order and reduce stock |
 | Order | GET | /orders/{id} | Look up an order |
 | Order | GET | /orders | List orders |
 | Both | GET | /actuator/health | Check health |
@@ -116,8 +134,11 @@ docker compose -p order-verification -f compose.test.yaml down
 The first command returns the tests' exit code and runs both Maven verify suites
 on Java 17. Inventory tests start ten simultaneous reductions against five
 units: exactly five must succeed, five must be rejected, and stock must finish
-at zero. Rejected reductions must leave stock unchanged. Order has controller,
-service, and context-startup tests.
+at zero. Rejected reductions must leave stock unchanged. Reservation tests check
+that retries never reduce twice, release returns stock exactly once, and a
+reduce racing a release always ends with stock restored (repeated five times).
+Order tests cover compensation after timeouts or failed saves and
+Idempotency-Key retries. 35 tests in total (Inventory 16, Order 19).
 
 For an isolated image/startup check (Compose 2.24.4+), without publishing app
 ports or using the laptop database volume:
@@ -148,13 +169,43 @@ do not run them against valuable data.
 Portable Compose supplies internal addresses and publishes no database/Redis
 ports. Hibernate currently uses ddl-auto=update; schema migrations are future work.
 
+## Stress and resilience results
+
+Measured 2026-10-13 on one laptop (Docker Desktop, 3.9 GiB VM) with the isolated
+demo stack and `scripts/run_k6_capacity.py`. One checkout = a cached stock read
+plus an order. A stage passes when order p95 < 1 s, read p95 < 500 ms, at least
+99% of orders succeed, and nothing unexpected happens; afterwards PostgreSQL is
+audited.
+
+| Scenario | Result |
+| --- | --- |
+| Capacity, 30 products | Passed up to **400 checkouts/s** (order p95 9 ms); 800/s missed the latency target |
+| Flash sale, 3 hot products | Passed up to **400 checkouts/s** (order p95 13 ms) |
+| Overload at 1,600/s | ~700 orders/s processed, p95 1.96 s, 0 errors |
+| Database frozen 8 s at 100 orders/s, clients retry | All 2,784 checkouts ended in an order after 362 retries |
+| Same freeze, before reservations were added | 135 units of stock lost |
+| Database audit, every run after the fix | 0 lost units, 0 duplicate orders, 0 reservations without an order |
+
+If each shopper checks out once a minute, 400 checkouts/s corresponds to about
+24,000 active shoppers. That is an assumption-based conversion, not a test of
+that many connections. Laptop results vary with free memory; see the
+[full report](docs/stress-and-resilience.md) for method, caveats and limits.
+
 ## CI and hosting
 
+For a portfolio walkthrough without a frontend, use the
+[API demo kit](docs/api-demo.md): a Postman collection, a recording-ready
+PowerShell script, and an isolated local demo stack.
+The [external catalog traffic test](docs/external-api-testing.md) imports
+sample products from DummyJSON and verifies concurrent ordering against the
+isolated demo databases.
+The [k6 test report](docs/k6-testing.md) records a 30-second normal-traffic run
+and a 30-user contention burst, with authoritative stock/order checks afterward.
+
 GitHub Actions runs both test suites against isolated PostgreSQL/Redis, builds
-both images, and now checks healthy Compose startup and health endpoints.
-See [workflow runs](https://github.com/pranshu1606/distributed-order-processing-system/actions).
-Last remotely verified successful commit: 9a61323 (checked 2026-10-11).
-Current local changes need a push and a new run before claiming CI coverage.
+both images, and checks healthy Compose startup and health endpoints on every
+push. The badge at the top shows the latest
+[workflow run](https://github.com/pranshu1606/distributed-order-processing-system/actions).
 
 See [demo deployment instructions](docs/demo-hosting.md). Files for a small VM,
 HTTPS, and password access are prepared. A server/domain and live verification
@@ -168,9 +219,12 @@ are pending.
 - [x] Transactional reduction with PostgreSQL row locking
 - [x] Docker builds, Compose, database initialization, health checks
 - [x] GitHub Actions tests and image builds
-- [ ] Push and verify CI for latest locking/startup checks
+- [x] Push and verify CI for locking/startup checks (c26efb6)
 - [ ] Launch and verify public demo
-- [ ] Reservations/compensation and idempotent order creation
-- [ ] Timeouts, failure recovery, and schema migrations
+- [x] Reservations/compensation and idempotent order creation
+- [x] Fail-fast timeouts, 503 + Retry-After, arrival-rate and chaos stress tests
+- [ ] Automatic reconciliation of reservations left by a crash
+- [ ] Schema migrations (Flyway) instead of ddl-auto
+- [ ] Horizontal scaling: several service replicas behind a load balancer
 - [ ] Kubernetes and Azure (later milestones)
 - [ ] Optional payment, notification, and messaging

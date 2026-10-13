@@ -1,5 +1,7 @@
 package com.pranshu.order_service.entity;
 
+import java.util.UUID;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -32,4 +34,12 @@ public class Order {
     @Column(nullable = false)
     @NotBlank
     private String status;
+
+    // Links the order to its stock reservation in Inventory (null for older orders).
+    @Column(unique = true)
+    private UUID reservationId;
+
+    // Client-chosen key that makes retries safe: the same key returns the same order.
+    @Column(unique = true, length = 100)
+    private String idempotencyKey;
 }

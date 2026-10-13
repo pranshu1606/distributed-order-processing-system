@@ -1,5 +1,8 @@
 package com.pranshu.inventory_service.controller;
 
+import java.util.Map;
+import java.util.UUID;
+
 import com.pranshu.inventory_service.dto.InventoryRequest;
 import com.pranshu.inventory_service.entity.Inventory;
 import com.pranshu.inventory_service.service.InventoryService;
@@ -26,7 +29,13 @@ public class InventoryController {
     }
 
     @PutMapping("/{productId}/reduce")
-    public Inventory reduceInventory(@PathVariable Long productId, @RequestParam Integer quantity){
-        return inventoryService.reduceInventory(productId,quantity);
+    public Inventory reduceInventory(@PathVariable Long productId, @RequestParam Integer quantity,
+                                     @RequestParam(required = false) UUID reservationId){
+        return inventoryService.reduceInventory(productId, quantity, reservationId);
+    }
+
+    @PostMapping("/reservations/{reservationId}/release")
+    public Map<String, Boolean> releaseReservation(@PathVariable UUID reservationId) {
+        return Map.of("released", inventoryService.releaseReservation(reservationId));
     }
 }

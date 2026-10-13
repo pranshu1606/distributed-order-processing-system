@@ -1,5 +1,11 @@
 package com.pranshu.order_service.exception;
 
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.CannotCreateTransactionException;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -58,5 +64,20 @@ public class GlobalExceptionHandler {
             HttpClientErrorException.Conflict exception) {
 
         return "Not enough inventory";
+    }
+
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_CONTENT)
+    public String handleIdempotencyKeyReused(IdempotencyKeyReusedException exception) {
+        return exception.getMessage();
+    }
+
+    // Overload or a stalled dependency: fail fast and tell the client when to retry.
+    @ExceptionHandler({ServiceBusyException.class, CannotCreateTransactionException.class,
+            TransientDataAccessException.class, DataAccessResourceFailureException.class})
+    public ResponseEntity<String> handleServiceBusy(Exception exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "1")
+                .body("Service busy; please retry");
     }
 }

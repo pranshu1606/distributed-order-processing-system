@@ -1,5 +1,11 @@
 # Project testing and validation report
 
+> **Update 2026-10-13:** Docker was recovered, laptop data verified unchanged,
+> and the pending checks below were completed. Reservations, compensation and
+> Idempotency-Key were added; 35 tests pass. Current capacity, overload and
+> chaos results are in [stress-and-resilience.md](stress-and-resilience.md),
+> which supersedes the "pending" items in this report.
+
 Status recorded on **2026-10-12**. This report brings together the implementation,
 test evidence, demo instructions, failures, and remaining work. Measurements below
 are historical results from 2026-10-10/11, not measurements of the latest code.

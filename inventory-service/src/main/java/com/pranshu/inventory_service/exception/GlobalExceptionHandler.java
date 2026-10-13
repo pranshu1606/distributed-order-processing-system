@@ -23,6 +23,12 @@ public class GlobalExceptionHandler {
         return exception.getMessage();
     }
 
+    @ExceptionHandler(ReservationReleasedException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public String handleReservationReleased(ReservationReleasedException exception){
+        return exception.getMessage();
+    }
+
     @ExceptionHandler(DuplicateProductException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public String handleDuplicateProduct(DuplicateProductException exception){

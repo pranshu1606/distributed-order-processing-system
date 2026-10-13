@@ -107,4 +107,4 @@ $outputFile = Join-Path $outputDirectory 'last-run.json'
 Write-Host "`nPASS: all ten API steps verified." -ForegroundColor Green
 Write-Host "Evidence saved to $outputFile"
 Write-Host 'Concurrency is verified separately by the PostgreSQL integration tests.'
-Write-Host 'Known next step: reservations/compensation and idempotency for partial failures.'
+Write-Host 'Failure handling (reservations, compensation, Idempotency-Key) is stress-tested in docs/stress-and-resilience.md.'

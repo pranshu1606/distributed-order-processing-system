@@ -19,6 +19,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
+import org.springframework.http.MediaType;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import com.pranshu.order_service.dto.OrderRequest;
@@ -44,7 +47,9 @@ public class OrderControllerTest {
                 1L,
                 101L,
                 2,
-                "CREATED"
+                "CREATED",
+                null,
+                null
         );
 
         when(orderService.getAllOrders())
@@ -65,10 +70,12 @@ public class OrderControllerTest {
                 1L,
                 101L,
                 2,
-                "CREATED"
+                "CREATED",
+                null,
+                null
         );
 
-        when(orderService.createOrder(any(OrderRequest.class))).thenReturn(order);
+        when(orderService.createOrder(any(OrderRequest.class), isNull())).thenReturn(order);
         mockMvc.perform(
                         post("/orders")
                                 .contentType("application/json")
@@ -87,7 +94,7 @@ public class OrderControllerTest {
                 .andExpect(jsonPath("$.status").value("CREATED"));
                 ArgumentCaptor<OrderRequest> requestCaptor =
                         ArgumentCaptor.forClass(OrderRequest.class);
-                verify(orderService).createOrder(requestCaptor.capture());
+                verify(orderService).createOrder(requestCaptor.capture(), isNull());
                 OrderRequest capturedRequest = requestCaptor.getValue();
                 assertEquals(Long.valueOf(101L), capturedRequest.getProductId());
                 assertEquals(Integer.valueOf(2), capturedRequest.getQuantity());
@@ -137,7 +144,9 @@ public class OrderControllerTest {
                 1L,
                 101L,
                 2,
-                "CREATED"
+                "CREATED",
+                null,
+                null
         );
 
         when(orderService.getOrder(1L))
@@ -159,5 +168,28 @@ public class OrderControllerTest {
 
         mockMvc.perform(get("/orders/9999"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createOrder_shouldPassIdempotencyKeyToService() throws Exception {
+        Order order = new Order(1L, 101L, 2, "CREATED", null, "checkout-42");
+        when(orderService.createOrder(any(OrderRequest.class), eq("checkout-42"))).thenReturn(order);
+
+        mockMvc.perform(post("/orders")
+                        .header("Idempotency-Key", "checkout-42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productId\":101,\"quantity\":2}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idempotencyKey").value("checkout-42"));
+    }
+
+    @Test
+    void createOrder_withOverlongIdempotencyKey_shouldReturnBadRequest() throws Exception {
+        mockMvc.perform(post("/orders")
+                        .header("Idempotency-Key", "k".repeat(101))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productId\":101,\"quantity\":2}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(orderService);
     }
 }

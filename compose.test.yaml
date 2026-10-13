@@ -24,14 +24,17 @@ services:
       retries: 30
   tests:
     image: maven:3.9-eclipse-temurin-17
+    mem_limit: 1g
     working_dir: /workspace
     volumes:
       - .:/workspace
+      - test-maven-cache:/root/.m2
     environment:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       REDIS_HOST: redis
       SPRING_DATA_REDIS_HOST: redis
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:ActiveProcessorCount=2 -XX:+UseG1GC
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,3 +48,6 @@ services:
         mvn -B -f inventory-service/pom.xml verify &&
         SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/order_db
         mvn -B -f order-service/pom.xml verify
+
+volumes:
+  test-maven-cache: {}

@@ -11,6 +11,8 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.CacheManager;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.UUID;
@@ -28,6 +30,7 @@ class InventoryConcurrencyTests {
     @Autowired InventoryService service;
     @Autowired InventoryRepository repository;
     @Autowired CacheManager cacheManager;
+    @Autowired PlatformTransactionManager transactionManager;
 
     @RepeatedTest(3)
     void concurrentReductionsCannotSellMoreThanAvailableStock() throws Exception {
@@ -48,7 +51,7 @@ class InventoryConcurrencyTests {
                         throw new IllegalStateException("Workers did not start in time");
                     }
                     try {
-                        service.reduceInventory(productId, 1);
+                        service.reduceInventory(productId, 1, null);
                         return true;
                     } catch (InsufficientInventoryException expected) {
                         return false;
@@ -79,9 +82,28 @@ class InventoryConcurrencyTests {
         Inventory row = repository.save(new Inventory(null, productId, "Cache test", 5));
         try {
             assertEquals(5, service.getInventory(productId).getQuantity());
-            service.reduceInventory(productId, 2);
+            service.reduceInventory(productId, 2, null);
             assertNull(cacheManager.getCache("inventory").get(productId));
             assertEquals(3, service.getInventory(productId).getQuantity());
+        } finally {
+            repository.deleteById(row.getId());
+            cacheManager.getCache("inventory").evict(productId);
+        }
+    }
+
+    @Test
+    void rollbackRestoresStockAndKeepsTheCachedValue() {
+        Long productId = newProductId();
+        Inventory row = repository.save(new Inventory(null, productId, "Rollback test", 5));
+        try {
+            assertEquals(5, service.getInventory(productId).getQuantity());
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                assertEquals(3, service.reduceInventory(productId, 2, null).getQuantity());
+                status.setRollbackOnly();
+            });
+            // JDBC must share the service transaction; Redis eviction waits for commit.
+            assertEquals(5, repository.findByProductId(productId).orElseThrow().getQuantity());
+            assertEquals(5, cacheManager.getCache("inventory").get(productId, Inventory.class).getQuantity());
         } finally {
             repository.deleteById(row.getId());
             cacheManager.getCache("inventory").evict(productId);
@@ -93,15 +115,15 @@ class InventoryConcurrencyTests {
         Long productId = newProductId();
         Inventory row = repository.save(new Inventory(null, productId, "Validation test", 2));
         try {
-            assertThrows(InvalidQuantityException.class, () -> service.reduceInventory(productId, null));
-            assertThrows(InvalidQuantityException.class, () -> service.reduceInventory(productId, 0));
-            assertThrows(InvalidQuantityException.class, () -> service.reduceInventory(productId, -1));
-            assertThrows(InsufficientInventoryException.class, () -> service.reduceInventory(productId, 3));
+            assertThrows(InvalidQuantityException.class, () -> service.reduceInventory(productId, null, null));
+            assertThrows(InvalidQuantityException.class, () -> service.reduceInventory(productId, 0, null));
+            assertThrows(InvalidQuantityException.class, () -> service.reduceInventory(productId, -1, null));
+            assertThrows(InsufficientInventoryException.class, () -> service.reduceInventory(productId, 3, null));
             assertEquals(2, repository.findByProductId(productId).orElseThrow().getQuantity());
         } finally {
             repository.deleteById(row.getId());
         }
-        assertThrows(ProductNotFoundException.class, () -> service.reduceInventory(productId, 1));
+        assertThrows(ProductNotFoundException.class, () -> service.reduceInventory(productId, 1, null));
     }
 
     private Long newProductId() {
